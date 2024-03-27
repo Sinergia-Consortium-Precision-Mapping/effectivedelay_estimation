@@ -1,0 +1,6 @@
+## Effective Delay
+
+#### Requirements
+
+#### Structure
+
