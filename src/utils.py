@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-### saving and loading made-easy
+# saving and loading made-easy
 def save(pickle_file, array):
     """
     Pickle array (in general any formattable object)
@@ -16,8 +16,9 @@ def save(pickle_file, array):
     ret::
         None
     """
-    with open(pickle_file, 'wb') as handle:
+    with open(pickle_file, "wb") as handle:
         pickle.dump(array, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
 
 def load(pickle_file):
     """
@@ -27,6 +28,6 @@ def load(pickle_file):
     ret::
         b: object loaded from pickle file
     """
-    with open(pickle_file, 'rb') as handle:
+    with open(pickle_file, "rb") as handle:
         b = pickle.load(handle)
     return b
