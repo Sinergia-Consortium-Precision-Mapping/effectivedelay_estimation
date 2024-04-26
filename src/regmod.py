@@ -1,6 +1,8 @@
+from typing import Callable, Union
 import numpy as np
 from scipy import linalg
 import networkx as nx
+from tqdm.notebook import tqdm
 
 
 def build_design_binary(adjacency: np.ndarray):
@@ -27,7 +29,7 @@ def build_design_binary(adjacency: np.ndarray):
     return a_binary
 
 
-def build_design_degree_fast(adjacency: np.ndarray, target_deg: bool = False):
+def build_design_degree(adjacency: np.ndarray, target_deg: bool = False):
     """Create a design matrix similar to the binary model but with weights. Weights are
     dependent on the degree of the "sending" node, the "receiving" node and nodes
     connected to the "sending" node (see `target_deg` parameter for details).
@@ -68,22 +70,65 @@ def build_design_degree_fast(adjacency: np.ndarray, target_deg: bool = False):
     return a_binary * a_weights
 
 
-def build_design_paths(adjacency: np.ndarray, max_path_length: int = 2):
-    """Create a design matrix for the path model. It has a value of k if the edge on
-    column j is in a path of length k between the two nodes connected by the edge on
-    row i. The maximum path length is defined by the `max_path_length` parameter.
+def get_normalize_function(normalization: str = "length") -> Callable:
+    """Helper to get the normalization function based on the conditions provided.
+
+    Parameters
+    ----------
+    normalization : str, optional
+        type of normalization, by default "length". The options are:
+        - (Default) normalization by the number of paths of each length
+        - normalization by total number of paths
+        - no normalization
+
+
+    Returns
+    -------
+    Callable
+        normalization function.
+    """
+
+    if normalization is None:
+
+        def norm_func(x):
+            return 1
+
+        return norm_func
+
+    if "total" in normalization:
+        norm_func = np.sum
+    else:
+
+        def norm_func(x):
+            return x
+
+    return norm_func
+
+
+def get_path_matrices(
+    adjacency: np.ndarray, max_path_length: int = 2, normalization: str = "length"
+):
+    """Computes a design matrix for each path length of the path model. It has a value
+    of k if the edge on column j is in a path of length k between the two nodes
+    connected by the edge on row i. The maximum path length is defined by the
+    `max_path_length` parameter.
 
     Parameters
     ----------
     adjacency : np.ndarray
-        adjacency matrix of the structural connectivity.
+        adjacency matrix of the graph.
     max_path_length : int, optional
         maximum path length allowed in the search, by default 2
+    normalization : str, optional
+        type of normalization, by default "length". The options are:
+        - (Default) normalization by the number of paths of each length
+        - normalization by total number of paths
+        - no normalization
 
     Returns
     -------
     np.ndarray
-        binary design matrix of the path model.
+        design matrices of the path model sorted in ascending path length.
     """
 
     s_graph = nx.Graph(adjacency)
@@ -91,23 +136,173 @@ def build_design_paths(adjacency: np.ndarray, max_path_length: int = 2):
     n_edges = n * (n - 1)
 
     edges_id = [(i, j) for i in range(n) for j in range(n) if i != j]
-
     edge_to_edge_id_dict = {ed: i for i, ed in enumerate(edges_id)}
-
     edges_id = np.array(edges_id)
 
-    a_design1 = np.diag(adjacency[*edges_id.T]).astype(int)
+    a_design = np.zeros((max_path_length, n_edges, n_edges))
+    norm_weights = np.array([np.eye(n_edges) for _ in range(max_path_length)])
 
-    for path_length in np.arange(2, max_path_length + 1):
-        a_design = np.zeros((n_edges, n_edges))
-        for design_i, (node_in, node_out) in enumerate(edges_id):
-            all_paths = nx.all_simple_edge_paths(
-                s_graph, node_in, node_out, cutoff=path_length
-            )
-            for path in all_paths:
-                if len(path) == path_length:
-                    ids = [edge_to_edge_id_dict[coords] for coords in path]
-                    a_design[design_i, ids] = path_length
-        a_design1[a_design1 == 0] = a_design[a_design1 == 0]
+    norm_func = get_normalize_function(normalization)
 
-    return a_design1
+    for design_i, (node_in, node_out) in enumerate(tqdm(edges_id)):
+        all_paths = nx.all_simple_edge_paths(
+            s_graph, node_in, node_out, cutoff=max_path_length
+        )
+        n_path_per_length = np.zeros(max_path_length)
+        for path in all_paths:
+            path_len = len(path)
+            n_path_per_length[path_len - 1] += 1
+            ids = [edge_to_edge_id_dict[coords] for coords in path]
+
+            a_design[path_len - 1, design_i, ids] += 1
+
+        norm_weights[:, design_i, design_i] = norm_func(n_path_per_length)
+
+    norm_weights = np.divide(
+        1, norm_weights, out=np.zeros_like(norm_weights), where=norm_weights != 0
+    )
+    a_design = norm_weights @ a_design
+
+    return a_design
+
+
+def combine_paths_matrices(
+    matrices: np.ndarray, alpha: Union[float, np.ndarray] = 0
+) -> np.ndarray:
+    """Create a design matrix for the path model by combining the design matrices of
+    each path lengths.
+
+    Parameters
+    ----------
+    matrices : np.ndarray
+        individual design matrices for each path length
+    alpha : Union[float, np.ndarray], optional
+        hyperparameter to include the influence of sub-optimal paths (could be one
+        single value or a value for length greater than the shortest path), by default 0
+
+    Returns
+    -------
+    np.ndarray
+        design matrix of the path model.
+
+    Raises
+    ------
+    ValueError
+        the `alpha` parameter should be a scalar or have the same length as the number
+        of matrices.
+    """
+
+    design = np.zeros_like(matrices[0])
+    alpha_id_vector = np.zeros(design.shape[-1], dtype=int)
+
+    # Compatiblity for the type of alpha
+    if isinstance(alpha, (float, int)):
+        alpha = np.array([alpha] * len(matrices))
+    if isinstance(alpha, (list, tuple)):
+        alpha = np.array(alpha)
+
+    if len(alpha) != len(matrices):
+        raise ValueError(
+            "The alpha parameter must be a scalar or have the same length as the number"
+            f" of matrices ({len(alpha)} alphas for {len(matrices)} matrices)."
+        )
+
+    for m in matrices:
+        # Find rows that have already been filled
+        has_shortest_paths = np.any(design, axis=1)
+
+        # Update the alpha vector for paths that have already been filled
+        alpha_vector = has_shortest_paths * alpha[alpha_id_vector] + ~has_shortest_paths
+        alpha_id_vector += has_shortest_paths * np.any(m, axis=1)
+
+        # Update the design matrix
+        design += np.diag(alpha_vector) @ m
+
+        # Early stopping if all rows have been filled and alpha is zero
+        if np.any(design, axis=1).all() and np.isclose(alpha, 0).all():
+            return design
+    return design
+
+
+def build_design_paths_old(adjacency: np.ndarray, alpha: float, **kwargs) -> np.ndarray:
+    """Build the design matrix of the path model by summing the design matrices of each
+    path length, weighted by powers the `alpha` parameter.
+
+    Parameters
+    ----------
+    adjacency : np.ndarray
+        adjacency matrix of the graph.
+    alpha : float
+        parameter to weight the design matrices of paths with length greater than one.
+
+    Returns
+    -------
+    np.ndarray
+        design matrix of the path model.
+    """
+
+    matrices = get_path_matrices(adjacency, **kwargs)
+
+    a_design_path = np.sum(
+        [np.power(alpha, i) * a_design_i for i, a_design_i in enumerate(matrices)],
+        axis=0,
+    )
+
+    return a_design_path
+
+
+def predict_conduction_delays(
+    a_design: np.ndarray,
+    x: np.ndarray,
+    is_matrix: bool = True,
+    invert_weights: bool = False,
+) -> np.ndarray:
+    """Predict the conduction delays from provided effective delay `x` by multiplying
+    with the design matrix `a_design`. The effective delay `x` can be provided as a
+    vector or as a matrix given the condition in `is_matrix`.
+
+    Parameters
+    ----------
+    a_design : np.ndarray
+        design matrix of the regression model.
+    x : np.ndarray
+        effective delay to be predicted (either a vector of length n_edges or a matrix
+        of shape n_nodes x n_nodes).
+    is_matrix : bool, optional
+        condition to provide `x` and to return `y_hat` as matrices, by default True
+    invert_weights : bool, optional
+        use the non-zero weights of the design matrix as one over the original weight,
+        by default False
+
+    Returns
+    -------
+    np.ndarray
+        predicted conduction delays.
+    """
+
+    x_pred = x.copy()
+    if is_matrix:
+        off_diag_ids = np.array(
+            [(i, j) for i in range(len(x)) for j in range(len(x)) if i != j]
+        ).T
+
+        x_pred = x[*off_diag_ids]
+
+    a_predict = a_design.copy()
+    if invert_weights:
+        a_predict = np.divide(
+            1,
+            a_design,
+            out=np.zeros_like(a_design, dtype=float),
+            where=a_design != 0,
+        )
+
+    y_pred = a_predict @ x_pred
+
+    if is_matrix:
+        y_pred_mat = np.zeros_like(x)
+
+        y_pred_mat[*off_diag_ids] = y_pred
+
+        return y_pred_mat
+    return y_pred
