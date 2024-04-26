@@ -194,6 +194,7 @@ def combine_paths_matrices(
 
     design = np.zeros_like(matrices[0])
     alpha_id_vector = np.zeros(design.shape[-1], dtype=int)
+    alpha_norm = np.zeros_like(alpha_id_vector)
 
     # Compatiblity for the type of alpha
     if isinstance(alpha, (float, int)):
@@ -220,7 +221,12 @@ def combine_paths_matrices(
 
         # Early stopping if all rows have been filled and alpha is zero
         if np.any(design, axis=1).all() and np.isclose(alpha, 0).all():
+            print("Early stopping !")
             return design
+
+    # Normalize the design matrix by 1 plus the sum of existing alpha weights
+    alpha_norm = np.array([1 + alpha[:i].sum() for i in alpha_id_vector])
+    design /= alpha_norm
     return design
 
 
