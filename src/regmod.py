@@ -226,7 +226,7 @@ def combine_paths_matrices(
 
     # Normalize the design matrix by 1 plus the sum of existing alpha weights
     alpha_norm = np.array([1 + alpha[:i].sum() for i in alpha_id_vector])
-    design /= alpha_norm
+    design = np.diag(1 / alpha_norm) @ design
     return design
 
 
