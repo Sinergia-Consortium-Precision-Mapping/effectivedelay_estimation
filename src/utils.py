@@ -5,33 +5,42 @@ from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
 
+def save(pickle_filename: str, iterable: object) -> None:
+    """
+    Pickle an object to a file.
 
-# saving and loading made-easy
-def save(pickle_file, array):
+    Parameters
+    ----------
+    pickle_filename : str
+        Path to the file where the object will be pickled.
+    iterable : object
+        The object to be pickled.
+
+    Returns
+    -------
+    None
     """
-    Pickle array (in general any formattable object)
-    args::
-        pickle_file: str, path to save the file
-        array: object to be pickled
-    ret::
-        None
-    """
-    with open(pickle_file, "wb") as handle:
-        pickle.dump(array, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(pickle_filename, "wb") as handle:
+        pickle.dump(iterable, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def load(pickle_file):
+def load(pickle_filename: str) -> object:
     """
-    Loading pickled array
-    args::
-        pickle_file: str, path to load the file
-    ret::
-        b: object loaded from pickle file
+    Load a pickled object from the specified file.
+
+    Parameters
+    ----------
+    pickle_filename : str
+        The filename of the pickled object to load.
+
+    Returns
+    -------
+    object
+        The loaded object.
     """
-    with open(pickle_file, "rb") as handle:
+    with open(pickle_filename, "rb") as handle:
         b = pickle.load(handle)
     return b
-
 
 def add_cbar(fig, ax, **kwargs):
     """Add a colorbar to an existing figure/axis.
@@ -88,3 +97,41 @@ def annotate_heatmap(
                     row_i, col_j, f"{val:1.2f}", ha="center", va="center", color=color
                 )
     return fig, ax
+
+def remove_diagonal_entries(A: np.ndarray) -> np.ndarray:
+    """
+    Remove the diagonal entries from the input matrix `A`.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        The input matrix.
+
+    Returns
+    -------
+    numpy.ndarray
+        The input matrix `A` with the diagonal entries removed.
+    """
+    return A[~np.eye(A.shape[0],dtype=bool)].reshape(A.shape[0],-1)
+
+def add_diagonal_entries(A: np.ndarray) -> np.ndarray:
+    """
+    Add diagonal entries with zeros to a 2D numpy array.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        A 2D numpy array with shape (d-1, d).
+
+    Returns
+    -------
+    numpy.ndarray
+        A 2D numpy array with shape (d, d) where the diagonal entries are set to 0.
+    """
+    d = A.shape[0]
+    assert A.shape[1] == d - 1
+    ret = np.ndarray((d, d+1), dtype=A.dtype)
+    ret[:,0] = 0
+    ret[:-1,1:] = A.reshape((d-1, d))
+    ret = ret.reshape(-1)[:-d].reshape(d,d)
+    return ret
