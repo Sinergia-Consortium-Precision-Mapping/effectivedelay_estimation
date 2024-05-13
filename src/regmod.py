@@ -230,6 +230,39 @@ def combine_paths_matrices(
     return design
 
 
+def build_design_shortest(adjacency: np.ndarray) -> np.ndarray:
+    """Create a design matrix for the path model using only the shortest paths. This
+    implementation is faster than parsing through all paths (relevant for alpha = 0).
+
+    Parameters
+    ----------
+    adjacency : np.ndarray
+        adjacency matrix of the graph.
+
+    Returns
+    -------
+    np.ndarray
+        design matrix of the path model (for alpha = 0).
+    """
+    graph = nx.Graph(adjacency)
+
+    n_nodes = graph.number_of_nodes()
+    all_length = dict(nx.shortest_path_length(graph))
+    all_nodes_pairs = [(i, j) for i in range(n_nodes) for j in range(n_nodes) if i != j]
+    edge_to_edge_id_dict = {ed: i for i, ed in enumerate(all_nodes_pairs)}
+
+    design_matrix = np.zeros((len(all_nodes_pairs), len(all_nodes_pairs)))
+
+    for row_i, (i, j) in enumerate(all_nodes_pairs):
+        paths = list(nx.all_simple_edge_paths(graph, i, j, cutoff=all_length[i][j]))
+        # Looping is faster than using `map` or concatenating to a list of edges
+        for p in paths:
+            for e in p:
+                design_matrix[row_i, edge_to_edge_id_dict[e]] += 1 / len(paths)
+
+    return design_matrix
+
+
 def build_design_paths_old(adjacency: np.ndarray, alpha: float, **kwargs) -> np.ndarray:
     """Build the design matrix of the path model by summing the design matrices of each
     path length, weighted by powers the `alpha` parameter.
