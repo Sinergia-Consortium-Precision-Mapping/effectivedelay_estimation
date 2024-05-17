@@ -1,4 +1,5 @@
 from typing import Callable, Union
+from collections import Counter
 import numpy as np
 from scipy import linalg
 import networkx as nx
@@ -230,7 +231,9 @@ def combine_paths_matrices(
     return design
 
 
-def build_design_shortest(adjacency: np.ndarray) -> np.ndarray:
+def build_design_shortest(
+    adjacency: np.ndarray, n_subopt: int = 0, alpha: float = 0
+) -> np.ndarray:
     """Create a design matrix for the path model using only the shortest paths. This
     implementation is faster than parsing through all paths (relevant for alpha = 0).
 
@@ -238,6 +241,10 @@ def build_design_shortest(adjacency: np.ndarray) -> np.ndarray:
     ----------
     adjacency : np.ndarray
         adjacency matrix of the graph.
+    n_subopt : int, optional
+        number of sub-optimal path to consider, by default 0.
+    alpha : float, optional
+        parameter for the sub-optimal paths, by default 0.
 
     Returns
     -------
@@ -251,16 +258,24 @@ def build_design_shortest(adjacency: np.ndarray) -> np.ndarray:
     all_nodes_pairs = [(i, j) for i in range(n_nodes) for j in range(n_nodes) if i != j]
     edge_to_edge_id_dict = {ed: i for i, ed in enumerate(all_nodes_pairs)}
 
-    design_matrix = np.zeros((len(all_nodes_pairs), len(all_nodes_pairs)))
+    design_matrix = np.zeros((1 + n_subopt, len(all_nodes_pairs), len(all_nodes_pairs)))
 
     for row_i, (i, j) in enumerate(all_nodes_pairs):
-        paths = list(nx.all_simple_edge_paths(graph, i, j, cutoff=all_length[i][j]))
+        max_length = all_length[i][j] + n_subopt
+        paths = list(nx.all_simple_edge_paths(graph, i, j, cutoff=max_length))
+
+        length_count = Counter([len(p) for p in paths])
+
         # Looping is faster than using `map` or concatenating to a list of edges
         for p in paths:
+            len_id = len(p) - all_length[i][j]
             for e in p:
-                design_matrix[row_i, edge_to_edge_id_dict[e]] += 1 / len(paths)
+                # design_matrix[len_id, row_i, edge_to_edge_id_dict[e]] += 1 / len(p)
+                design_matrix[len_id, row_i, edge_to_edge_id_dict[e]] += (
+                    1 / length_count[len(p)]
+                )
 
-    return design_matrix
+    return np.sum([design_matrix[i] * alpha**i for i in range(n_subopt + 1)], axis=0)
 
 
 def build_design_paths_old(adjacency: np.ndarray, alpha: float, **kwargs) -> np.ndarray:
