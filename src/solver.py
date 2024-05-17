@@ -9,7 +9,7 @@ def combine_paths_matrices_torch(
     matrices: torch.tensor, alpha: Union[float, torch.tensor] = 0
 ) -> torch.tensor:
     # NOTE: this function is not optimizable for alpha
-    # however this would be a starting point for that 
+    # however this would be a starting point for that
     # so we include it in the solver loop for now
     """Create a design matrix for the path model by combining the design matrices of
     each path lengths.
@@ -66,6 +66,7 @@ def combine_paths_matrices_torch(
     design = torch.diag(1 / alpha_norm).type(torch.float64) @ design
     return design
 
+
 def forward(a_design: torch.tensor, effective_delay: torch.tensor) -> torch.tensor:
     """
     Computes the estimated delay based on the design matrix and the effective delay.
@@ -85,24 +86,39 @@ def forward(a_design: torch.tensor, effective_delay: torch.tensor) -> torch.tens
     estimated_delay = a_design @ effective_delay
     return estimated_delay
 
-def naive_gradient_descent(x: torch.tensor, y_ground: torch.tensor, alpha: torch.tensor, multi_design: torch.tensor, 
-                           early_stop:float=1e-5, step_size:float=1e-3, n_iter:int=1000, verbose:bool=False
-                           ) -> tuple[np.ndarray, float]:
+
+def naive_gradient_descent(
+    x: torch.tensor,
+    y_ground: torch.tensor,
+    alpha: torch.tensor,
+    multi_design: torch.tensor,
+    early_stop: float = 1e-5,
+    step_size: float = 1e-3,
+    n_iter: int = 1000,
+    verbose: bool = False,
+) -> tuple[np.ndarray, float]:
     """
-    Performs naive gradient descent optimization on a given input tensor `x` to minimize the mean squared error (MSE) between the predicted output `y_pred` and the ground truth `y_ground`.
+    Performs naive gradient descent optimization on a given input tensor `x` to
+    minimize the mean squared error (MSE) between the predicted output `y_pred` and the
+    ground truth `y_ground`.
 
     Parameters:
         x (torch.tensor): The input tensor to be optimized.
         y_ground (torch.tensor): The ground truth output tensor.
         alpha (torch.tensor): The alpha parameter used to combine the path matrices.
         multi_design (torch.tensor): The multi-design matrix.
-        early_stop (float, optional): The early stopping criterion based on the change in the last 5 loss values. Defaults to 1e-5.
-        step_size (float, optional): The step size for the gradient descent update. Defaults to 1e-3.
-        n_iter (int, optional): The maximum number of iterations for the gradient descent. Defaults to 1000.
-        verbose (bool, optional): Whether to print the loss at every 10% of the iterations. Defaults to False.
+        early_stop (float, optional): The early stopping criterion based on the change
+        in the last 5 loss values. Defaults to 1e-5.
+        step_size (float, optional): The step size for the gradient descent update.
+        Defaults to 1e-3.
+        n_iter (int, optional): The maximum number of iterations for the gradient
+        descent. Defaults to 1000.
+        verbose (bool, optional): Whether to print the loss at every 10% of the
+        iterations. Defaults to False.
 
     Returns:
-        tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final loss value.
+        tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final loss
+        value.
     """
 
     def mse(y_est, y_ground):
@@ -113,7 +129,7 @@ def naive_gradient_descent(x: torch.tensor, y_ground: torch.tensor, alpha: torch
         a_design = combine_paths_matrices_torch(multi_design, alpha=alpha)
         y_pred = forward(a_design, x)
 
-        loss = mse(y_pred, y_ground)
+        loss = mse(y_pred, y_ground) + torch.linalg.norm(x, ord=2)
         loss.backward()
 
         x.data = x.data - step_size * x.grad.data
@@ -126,25 +142,28 @@ def naive_gradient_descent(x: torch.tensor, y_ground: torch.tensor, alpha: torch
 
         # NOTE: arbitrary value
         if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
-           print(f"Stopped at iteration #{i}")
-           break 
+            print(f"Stopped at iteration #{i}")
+            break
 
     x_opt = x.detach().numpy()
     return x_opt, loss.item()
 
-def pseudo_inverse(y: np.ndarray, a_design: np.ndarray, rcond:float=1e-15):
+
+def pseudo_inverse(y: np.ndarray, a_design: np.ndarray, rcond: float = 1e-15):
     """
-    Computes the pseudo-inverse of the input matrix `a_design` and applies it to the input vector `y` to obtain the optimal solution `x_opt`.
+    Computes the pseudo-inverse of the input matrix `a_design` and applies it to the
+    input vector `y` to obtain the optimal solution `x_opt`.
 
     Parameters:
         y (numpy.ndarray): The input vector.
         a_design (numpy.ndarray): The design matrix.
-        rcond (float, optional): The relative condition number threshold. Defaults to 1e-15.
+        rcond (float, optional): The relative condition number threshold. Defaults to
+        1e-15.
 
     Returns:
         numpy.ndarray: The optimal solution `x_opt`.
     """
-    
+
     Ainv = np.linalg.pinv(a_design, rcond=rcond)
     x_opt = Ainv @ y
     return x_opt
