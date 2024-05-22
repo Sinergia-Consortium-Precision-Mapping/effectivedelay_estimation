@@ -232,7 +232,7 @@ def combine_paths_matrices(
 
 
 def build_design_shortest(
-    adjacency: np.ndarray, n_subopt: int = 0, alpha: float = 0
+    adjacency: np.ndarray, n_subopt: int = 0, alpha: Union[float, list] = 0
 ) -> np.ndarray:
     """Create a design matrix for the path model using only the shortest paths. This
     implementation is faster than parsing through all paths (relevant for alpha = 0).
@@ -243,13 +243,13 @@ def build_design_shortest(
         adjacency matrix of the graph.
     n_subopt : int, optional
         number of sub-optimal path to consider, by default 0.
-    alpha : float, optional
+    alpha : Union[float, list], optional
         parameter for the sub-optimal paths, by default 0.
 
     Returns
     -------
     np.ndarray
-        design matrix of the path model (for alpha = 0).
+        design matrix of the path model.
     """
     graph = nx.Graph(adjacency)
 
@@ -275,7 +275,19 @@ def build_design_shortest(
                     1 / length_count[len(p)]
                 )
 
-    return np.sum([design_matrix[i] * alpha**i for i in range(n_subopt + 1)], axis=0)
+    if isinstance(alpha, (float, int)):
+        alpha = [1] + [alpha] * n_subopt
+
+    normalize_vect = np.array(
+        [np.sign(mat.sum(axis=1)) * alpha[i] for i, mat in enumerate(design_matrix)]
+    )
+
+    normalize_vect = sum(normalize_vect)
+    normalize_vect = np.divide(1, normalize_vect, where=normalize_vect != 0)
+
+    design_out = np.sum([design_matrix[i] * a for i, a in enumerate(alpha)], axis=0)
+
+    return np.diag(normalize_vect) @ design_out
 
 
 def build_design_paths_old(adjacency: np.ndarray, alpha: float, **kwargs) -> np.ndarray:
