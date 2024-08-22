@@ -92,6 +92,7 @@ def gradient_descent_solver(
     x: torch.tensor,
     y_ground: torch.tensor,
     a_design: torch.tensor,
+    delta: float = 0,
     early_stop: float = 1e-5,
     step_size: float = 1e-3,
     l2_penalty: float = 0.1,
@@ -106,6 +107,7 @@ def gradient_descent_solver(
         x (torch.tensor): The input tensor to optimize.
         y_ground (torch.tensor): The ground truth output tensor.
         a_design (torch.tensor): The design matrix.
+        delta (float, optional): Value assigned for the synaptic delay parameter.
         early_stop (float, optional): The early stopping threshold. Defaults to 1e-5.
         step_size (float, optional): The step size for gradient descent. Defaults to 1e-3.
         n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
@@ -120,7 +122,7 @@ def gradient_descent_solver(
 
     loss_logs = [-1]
     for i in tqdm(range(n_iter)):
-        y_pred = forward(a_design, x)
+        y_pred = forward(a_design, x + delta * (x > 0))
 
         data_fit = mse(y_pred, y_ground)
         pseudo_fit = torch.linalg.norm(x, ord=2)
