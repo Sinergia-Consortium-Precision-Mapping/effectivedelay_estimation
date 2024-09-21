@@ -3,6 +3,7 @@ from scipy import linalg
 from tqdm.notebook import tqdm
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 import warnings
 
 
@@ -98,6 +99,7 @@ def gradient_descent_solver(
     l2_penalty: float = 0.1,
     n_iter: int = 1000,
     verbose: bool = False,
+    plot_loss: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
     Performs gradient descent optimization to minimize the mean squared error (MSE)
@@ -120,6 +122,7 @@ def gradient_descent_solver(
     def mse(y_est, y_ground):
         return torch.linalg.norm(y_est - y_ground)
 
+    df_loss = [-1]
     loss_logs = [-1]
     for i in tqdm(range(n_iter)):
         y_pred = forward(a_design, x + delta * (x > 0))
@@ -144,11 +147,24 @@ positivity loss: {positivity.item()}"""
                 )
                 print()
         loss_logs.append(loss.item())
+        df_loss.append(data_fit.item())
 
         # NOTE: arbitrary value
-        if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
+        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
+        if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
             print(f"Stopped at iteration #{i}")
             break
+
+    if plot_loss:
+        _, ax = plt.subplots()
+
+        ax.plot(df_loss)
+
+        plot_last_n = 100
+        ax.set_xlim(max([-1, i - plot_last_n]), i)
+        ax.set_ylim(
+            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
+        )
 
     x_opt = x.detach().numpy()
     return x_opt, data_fit.item()
