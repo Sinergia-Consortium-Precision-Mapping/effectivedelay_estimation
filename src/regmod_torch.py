@@ -23,10 +23,6 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
         design matrix of the path model.
     """
 
-    # IMPLEMENTATION CONSIDERING ALPHA FACTOR SAME FOR ALL
-    # if isinstance(alpha, (float, int)):
-    #     alpha = [1] + [alpha] * n_subopt
-
     normalize_vect = torch.zeros(design_matrix[0].shape[0])
     for i, mat in enumerate(design_matrix):
         if i == 0:
@@ -34,7 +30,6 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
         else:
             normalize_vect += torch.sign(mat.sum(axis=1)) * alpha
 
-    # normalize_vect = sum(normalize_vect)
     normalize_vect[normalize_vect != 0] = 1 / normalize_vect[normalize_vect != 0]
 
     design_out = torch.zeros_like(design_matrix[0], dtype=torch.float)
@@ -43,7 +38,6 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
             design_out += design_matrix[i]
         else:
             design_out += design_matrix[i] * alpha
-    # print(torch.tensor([design_matrix[i] * alpha for i in range(len(design_matrix))]))
-    # design_out = torch.sum(torch.tensor([design_matrix[i] * alpha for i in range(len(design_matrix))]), axis=0)
+
     return torch.diag(normalize_vect) @ design_out
 
