@@ -1,4 +1,5 @@
 .DS_Store
+pre-compute_design-matrices/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
