@@ -231,7 +231,9 @@ def combine_paths_matrices(
     return design
 
 
-def get_shortest_matrices(adjacency: np.ndarray, n_subopt: int = 0):
+def get_shortest_matrices(
+    adjacency: np.ndarray, n_subopt: int = 0, progress: bool = True
+):
     """Create design matrices for level of suboptimal shortest paths.
 
     Parameters
@@ -240,13 +242,15 @@ def get_shortest_matrices(adjacency: np.ndarray, n_subopt: int = 0):
         adjacency matrix of the graph.
     n_subopt : int, optional
         number of sub-optimal path to consider, by default 0.
+    progress : bool, optional
+        condition to show a progress bar, by default True.
 
     Returns
     -------
     np.ndarray
         design matrices for each level of suboptimal paths.
     """
-    
+
     graph = nx.Graph(adjacency)
 
     n_nodes = graph.number_of_nodes()
@@ -256,7 +260,16 @@ def get_shortest_matrices(adjacency: np.ndarray, n_subopt: int = 0):
 
     design_matrix = np.zeros((1 + n_subopt, len(all_nodes_pairs), len(all_nodes_pairs)))
 
-    for row_i, (i, j) in enumerate(all_nodes_pairs):
+    if progress:
+        tqdm_fun = tqdm
+    else:
+
+        def tqdm_fun(x, *args, **kwargs):
+            return x
+
+    for row_i, (i, j) in enumerate(
+        tqdm_fun(all_nodes_pairs, total=len(all_nodes_pairs))
+    ):
         max_length = all_length[i][j] + n_subopt
         paths = list(nx.all_simple_edge_paths(graph, i, j, cutoff=max_length))
 
@@ -274,8 +287,13 @@ def get_shortest_matrices(adjacency: np.ndarray, n_subopt: int = 0):
     return design_matrix
 
 
-def apply_alpha_to_design(design_matrix: np.ndarray, n_subopt: int = 0, alpha: Union[float, list] = 0):
-    """Create a design matrix for the path model with already provided optimal path matrices and alpha parameter
+def apply_alpha_to_design(
+    design_matrix: np.ndarray,
+    n_subopt: int = 0,
+    alpha: Union[list, np.ndarray, int, float] = 0,
+):
+    """Create a design matrix for the path model with already provided optimal path
+    matrices and alpha parameter
 
     Parameters
     ----------
@@ -283,8 +301,12 @@ def apply_alpha_to_design(design_matrix: np.ndarray, n_subopt: int = 0, alpha: U
         path design matrices.
     n_subopt : int, optional
         number of sub-optimal path to consider, by default 0.
-    alpha : Union[float, list], optional
-        parameter for the sub-optimal paths, by default 0.
+    alpha : Union[list, np.ndarray, int, float], optional
+        parameter for the sub-optimal paths, by default 0. If a scalar (or float), the
+        alpha value will be broadcasted to all rows of the design matrix. If an array,
+        it is required to have the same size as the number of rows in the design matrix
+        (row-wise alpha). If a list, the alpha value will be applied to each
+        sub-optimal path.
 
     Returns
     -------
@@ -292,17 +314,36 @@ def apply_alpha_to_design(design_matrix: np.ndarray, n_subopt: int = 0, alpha: U
         design matrix of the path model.
     """
 
+    # Compatibility for int or float alpha
     if isinstance(alpha, (float, int)):
-        alpha = [1] + [alpha] * n_subopt
+        a_rowise = np.array([alpha] * design_matrix.shape[1])
 
+    # Compatibility for row-wise alphas (np.ndarray)
+    elif len(alpha) == design_matrix.shape[1]:
+        a_rowise = alpha.copy()
+    elif len(alpha) != n_subopt:
+        raise ValueError(
+            "The alpha parameter must be a scalar, a list of size equal to the number"
+            f" of sub-optimal paths ({n_subopt}) or a np.ndarray of size equal to the"
+            f" number of edges ({design_matrix.shape[1]}). Size is {len(alpha)}."
+        )
+
+    # Compatibility for list of row-wise alphas (one per sub-optimal path)
+    if isinstance(alpha, list):
+        a_vec = alpha.copy()
+    else:
+        a_vec = [np.ones_like(a_rowise)] + [a_rowise] * n_subopt
+
+    # Vectors of alphas if (sub-)optimal paths exist
     normalize_vect = np.array(
-        [np.sign(mat.sum(axis=1)) * alpha[i] for i, mat in enumerate(design_matrix)]
+        [np.sign(mat.sum(axis=1)) * a_vec[i] for i, mat in enumerate(design_matrix)]
     )
 
     normalize_vect = sum(normalize_vect)
     normalize_vect = np.divide(1, normalize_vect, where=normalize_vect != 0)
 
-    design_out = np.sum([design_matrix[i] * a for i, a in enumerate(alpha)], axis=0)
+    # Compute design matrix (without normalization)
+    design_out = np.sum([design_matrix[i] * a for i, a in enumerate(a_vec)], axis=0)
 
     return np.diag(normalize_vect) @ design_out
 
@@ -397,7 +438,8 @@ def predict_conduction_delays(
             [(i, j) for i in range(len(x)) for j in range(len(x)) if i != j]
         ).T
 
-        x_pred = x[*off_diag_ids]
+        # x_pred = x[*off_diag_ids]
+        x_pred = x[off_diag_ids[0], off_diag_ids[1]]
 
     a_predict = a_design.copy()
     if invert_weights:
@@ -413,7 +455,8 @@ def predict_conduction_delays(
     if is_matrix:
         y_pred_mat = np.zeros_like(x)
 
-        y_pred_mat[*off_diag_ids] = y_pred
+        # y_pred_mat[*off_diag_ids] = y_pred
+        y_pred_mat[off_diag_ids[0], off_diag_ids[1]] = y_pred
 
         return y_pred_mat
     return y_pred

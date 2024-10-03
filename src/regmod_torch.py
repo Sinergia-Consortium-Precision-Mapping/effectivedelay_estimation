@@ -8,7 +8,8 @@ from tqdm.notebook import tqdm
 
 
 def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float):
-    """Create a design matrix for the path model with already provided optimal path matrices and alpha parameter
+    """Create a design matrix for the path model with already provided optimal path
+    matrices and alpha parameter
 
     Parameters
     ----------
@@ -40,4 +41,3 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
             design_out += design_matrix[i] * alpha
 
     return torch.diag(normalize_vect) @ design_out
-
