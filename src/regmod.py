@@ -343,7 +343,9 @@ def apply_alpha_to_design(
     normalize_vect = np.divide(1, normalize_vect, where=normalize_vect != 0)
 
     # Compute design matrix (without normalization)
-    design_out = np.sum([design_matrix[i] * a for i, a in enumerate(a_vec)], axis=0)
+    design_out = np.sum(
+        [np.diag(a) @ design_matrix[i] for i, a in enumerate(a_vec)], axis=0
+    )
 
     return np.diag(normalize_vect) @ design_out
 
