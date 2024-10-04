@@ -7,14 +7,17 @@ import networkx as nx
 from tqdm.notebook import tqdm
 
 
-def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float):
-    """Create a design matrix for the path model with already provided optimal path matrices and alpha parameter
+def apply_alpha_to_design_torch(
+    design_matrix: torch.tensor, alpha: Union[torch.tensor, torch.float]
+):
+    """Create a design matrix for the path model with already provided optimal path
+    matrices and alpha parameter
 
     Parameters
     ----------
     design_matrix : torch.tensor
         path design matrices.
-    alpha : torch.float (+ autograd)
+    alpha : Union[torch.tensor, torch.float] (+ autograd)
         parameter for the sub-optimal paths, by default 0.
 
     Returns
@@ -23,7 +26,7 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
         design matrix of the path model.
     """
 
-    normalize_vect = torch.zeros(design_matrix[0].shape[0])
+    normalize_vect = torch.zeros(design_matrix.shape[1])
     for i, mat in enumerate(design_matrix):
         if i == 0:
             normalize_vect += torch.sign(mat.sum(axis=1))
@@ -40,4 +43,3 @@ def apply_alpha_to_design_torch(design_matrix: torch.tensor, alpha: torch.float)
             design_out += design_matrix[i] * alpha
 
     return torch.diag(normalize_vect) @ design_out
-
