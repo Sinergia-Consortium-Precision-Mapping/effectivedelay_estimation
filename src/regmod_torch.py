@@ -26,17 +26,18 @@ def apply_alpha_to_design_torch(
         design matrix of the path model.
     """
 
-    normalize_vect = torch.zeros(design_matrix.shape[1])
+    # Maybe faster ??
+    # normalize_vect = torch.zeros(design_matrix.shape[1])
     for i, mat in enumerate(design_matrix):
         if i == 0:
-            normalize_vect += torch.sign(mat.sum(axis=1))
+            normalize_vect = torch.sign(mat.sum(axis=1))
         else:
             normalize_vect += torch.sign(mat.sum(axis=1)) * alpha
 
     normalize_vect[normalize_vect != 0] = 1 / normalize_vect[normalize_vect != 0]
 
     design_out = torch.zeros_like(design_matrix[0], dtype=torch.float)
-    for i in range(len(design_matrix)):
+    for i, _ in enumerate(design_matrix):
         if i == 0:
             design_out += design_matrix[i]
         else:

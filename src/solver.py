@@ -10,6 +10,7 @@ import warnings
 
 from src.regmod_torch import *
 
+
 def combine_paths_matrices_torch(
     matrices: torch.tensor, alpha: Union[float, torch.tensor] = 0
 ) -> torch.tensor:
@@ -172,6 +173,7 @@ positivity loss: {positivity.item()}"""
     x_opt = x.detach().numpy()
     return x_opt, data_fit.item()
 
+
 def gradient_descent_solver_alpha(
     x: torch.tensor,
     y_ground: torch.tensor,
@@ -259,6 +261,7 @@ positivity loss: {positivity.item()}"""
 
     return x_opt, a_opt, data_fit.item()
 
+
 def gradient_descent_solver_delta(
     x: torch.tensor,
     y_ground: torch.tensor,
@@ -339,6 +342,7 @@ positivity loss: {positivity.item()}"""
     x_opt = x.detach().numpy()
     delta_opt = delta.detach().item()
     return x_opt, delta_opt, data_fit.item()
+
 
 def effect_delay_solver(
     x: torch.tensor,
@@ -423,10 +427,12 @@ positivity loss: {positivity.item()}"""
         )
 
     x_opt = x.detach().numpy()
-    alpha_opt = alpha.detach().item()
+    # alpha_opt = alpha.detach().item()
+    alpha_opt = alpha.detach().numpy()
     delta_opt = delta.detach().item()
-    
+
     return x_opt, (alpha_opt, delta_opt), data_fit.item()
+
 
 def naive_gradient_descent(
     x: torch.tensor,
