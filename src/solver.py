@@ -91,6 +91,93 @@ def forward(a_design: torch.tensor, effective_delay: torch.tensor) -> torch.tens
     estimated_delay = a_design @ effective_delay
     return estimated_delay
 
+def effective_delay_solver(
+    x: torch.tensor,
+    y_ground: torch.tensor,
+    a_design: torch.tensor,
+    delta: float = 0,
+    early_stop: float = 1e-5,
+    step_size: float = 1e-3,
+    schedule_step_size: int = 1000,
+    l2_penalty: float = 0.1,
+    n_iter: int = 1000,
+    verbose: bool = False,
+    plot_loss: bool = False,
+    return_logs: bool = False,
+) -> tuple[np.ndarray, float]:
+    """
+    Performs gradient descent optimization to minimize the mean squared error (MSE)
+    between the predicted output `y_pred` and the ground truth `y_ground`.
+
+    Parameters:
+        x (torch.tensor): The input tensor to optimize.
+        y_ground (torch.tensor): The ground truth output tensor.
+        a_design (torch.tensor): The design matrix.
+        delta (float, optional): Value assigned for the synaptic delay parameter.
+        early_stop (float, optional): The early stopping threshold. Defaults to 1e-5.
+        step_size (float, optional): The step size for gradient descent. Defaults to 1e-3.
+        n_iter (int, optional): The maximum number of iterations. Defaults to 1000.
+        verbose (bool, optional): Whether to print progress during optimization. Defaults to False.
+
+    Returns:
+        tuple[np.ndarray, float]: The optimized input tensor `x_opt` and the final MSE loss.
+    """
+
+    def mse(y_est, y_ground):
+        return torch.linalg.norm(y_est - y_ground)
+
+    df_loss = [-1]
+    loss_logs = [-1]
+    optimizer = torch.optim.ASGD([x], lr=step_size)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=schedule_step_size, gamma=0.5)
+
+    for i in tqdm(range(n_iter), disable=not verbose):
+        y_pred = forward(a_design, x + delta * (x > 0))
+
+        data_fit = mse(y_pred, y_ground)
+        pseudo_fit = torch.linalg.norm(x, ord=2)
+        positivity = torch.abs(torch.sum(x * (x < 0).type(torch.float)))
+
+        loss = data_fit + pseudo_fit * l2_penalty + positivity
+        loss.backward()
+
+        optimizer.step()
+        optimizer.zero_grad()
+        scheduler.step()
+
+        if verbose and not return_logs:
+            if (i % (n_iter // 10)) == 0:
+                print(f"###### ITER {i} #######")
+                print(
+                    f"""datafit loss: {data_fit.item()}
+L2 norm: {pseudo_fit.item()}
+positivity loss: {positivity.item()}"""
+                )
+                print()
+        loss_logs.append(loss.item())
+        df_loss.append(data_fit.item())
+
+        # NOTE: arbitrary value
+        # if torch.diff(torch.tensor(loss_logs[-5:])).abs().mean() < early_stop:
+        if torch.diff(torch.tensor(df_loss[-5:])).abs().mean() < early_stop:
+            print(f"Stopped at iteration #{i}")
+            break
+
+    if plot_loss:
+        _, ax = plt.subplots()
+
+        ax.plot(df_loss)
+
+        plot_last_n = 100
+        ax.set_xlim(max([-1, i - plot_last_n]), i)
+        ax.set_ylim(
+            np.min(df_loss[-plot_last_n:]) - 0.1, np.max(df_loss[-plot_last_n:]) + 0.1
+        )
+
+    x_opt = x.detach().numpy()
+    if return_logs:
+        return x_opt, data_fit.item(), loss_logs, df_loss
+    return x_opt, data_fit.item()
 
 def gradient_descent_solver(
     x: torch.tensor,
@@ -103,6 +190,7 @@ def gradient_descent_solver(
     n_iter: int = 1000,
     verbose: bool = False,
     plot_loss: bool = False,
+    return_logs: bool = False,
 ) -> tuple[np.ndarray, float]:
     """
     Performs gradient descent optimization to minimize the mean squared error (MSE)
@@ -140,7 +228,7 @@ def gradient_descent_solver(
         x.data = x.data - step_size * x.grad.data
         x.grad.data.zero_()
 
-        if verbose:
+        if verbose and not return_logs:
             if (i % (n_iter // 10)) == 0:
                 print(f"###### ITER {i} #######")
                 print(
@@ -170,6 +258,8 @@ positivity loss: {positivity.item()}"""
         )
 
     x_opt = x.detach().numpy()
+    if return_logs:
+        return x_opt, data_fit.item(), loss_logs, df_loss
     return x_opt, data_fit.item()
 
 def gradient_descent_solver_alpha(
